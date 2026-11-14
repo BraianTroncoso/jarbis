@@ -1,0 +1,45 @@
+# Modelos: 170 MB entre Piper, el wake word y Silero. Se bajan con
+# scripts/fetch-models.sh, no se commitean.
+models/piper/*.onnx
+models/piper/*.onnx.json
+models/wakeword/*.onnx
+!models/wakeword/NOTICE
+
+# Estado de runtime
+var/
+*.log
+
+# El token del puente NUNCA se commitea
+*.token
+bridge.token
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.venv*/
+
+# Entorno
+.env
+.env.local
+
+# Modelos de STT alternativos que se midieron (261 MB). Se bajan con
+# scripts/compare_stt.py; el veredicto está en docs/STT-COMPARATIVA.md
+models/stt/
+
+# MyJarbis — generated, per-developer state
+.myjarbis/active
+.claude/settings.local.json
+.myjarbis/memory.db
+.myjarbis/memory.db-journal
+.myjarbis/memory.db-wal
+.myjarbis/memory.db-shm
+.myjarbis/memory.db.*
+.claude/skills/myjarbis-*/
+.claude/commands/jarbis*.md
+
+# MyJarbis
+.myjarbis/context/codebase.txt
