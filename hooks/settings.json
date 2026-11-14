@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "Settings de la sesión de voz de Jarbis. Se pasa con `claude --settings`",
+    "desde brain/client.py, así la compuerta viaja con la invocación y no hace",
+    "falta tocar ~/.claude/settings.json ni el settings del proyecto twin.",
+    "",
+    "EL ORDEN DEL ARRAY IMPORTA. gate.py (el que deniega) va PRIMERO por el",
+    "issue #39344 de claude-code: un hook que devuelve 'ask' desactiva en",
+    "silencio las reglas declarativas de permissions.deny. Con el que deniega",
+    "adelante, el deny se evalúa igual.",
+    "",
+    "audit.py no decide nada y sale 0 siempre. Está separado a propósito:",
+    "Claude Code corre todos los hooks que matchean hasta el final antes de",
+    "mezclar las respuestas, así que el registro queda completo incluso de lo",
+    "que se bloqueó."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/gate.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/audit.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.gnupg/**)",
+      "Read(**/.claude/.credentials*)",
+      "Bash(sudo *)",
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)"
+    ]
+  }
+}
