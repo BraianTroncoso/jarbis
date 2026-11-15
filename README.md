@@ -28,27 +28,13 @@ Here the body opens a WebSocket and emits events as they happen. That enables th
 two things that could not exist before: answering without being polled, and
 speaking up without being spoken to.
 
-```
-┌─ BODY ─ native on Windows ──────────────────┐
-│  wake word → Silero VAD → Whisper → Piper   │
-│  (WSL has no real microphone)               │
-└───────┬──────────────────────────┬──────────┘
-        │                          │ reads state
-        │ WebSocket                ▼
-        │ the body PUSHES    ┌─────────────────┐
-        │                    │ ROBOT  ·  FACE  │
-        │                    │ widget   panel  │
-┌───────▼─────────────────┐  └─────────────────┘
-│  BRAIN ─ in WSL         │
-│  Agent SDK, live session│
-│  + MyJarbis             │
-└───────┬─────────────────┘
-        │ every tool call
-┌───────▼─────────────────────────────────────────┐
-│  GATE ─ PreToolUse hooks                        │
-│  reads freely · writes by asking · never destroys │
-└─────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/media/architecture.png" width="940" alt="Jarbis architecture — the body (wake word, Silero VAD, Whisper, Piper) pushes over WebSocket to the brain (a live Agent SDK session with MyJarbis), whose every tool call passes the PreToolUse gate; the robot, the face and the supervisor sit alongside, reading the state file and sending commands back">
+</p>
+
+The diagram is generated, not drawn: `python3 docs/media/gen.py` rewrites the
+SVG and the PNG from one description, so changing a layer is a line of code
+instead of an afternoon of nudging boxes.
 
 ---
 
