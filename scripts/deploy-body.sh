@@ -21,6 +21,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #   JARBIS_VENV=/mnt/c/Users/vos/venvs/jarbis \
 #   bash scripts/deploy-body.sh
 #
+# Y se elige acá si Jarbis vive prendido o se llama cuando lo necesitás:
+#   JARBIS_AUTOSTART=1   además arranca con Windows
+#   JARBIS_AUTOSTART=0   se saca de la carpeta de Inicio
+#   (sin definir)        no se toca lo que ya haya
+#   JARBIS_DESKTOP=0     no crear el acceso del escritorio
+#
 # Si no se pasa nada, se busca el perfil de Windows. Elegir "el más reciente"
 # no sirve: /mnt/c/Users tiene cuentas de servicio (WsiAccount, defaultuser0)
 # que se modifican solas y ganaban la carrera. Se prefiere el perfil que YA
@@ -87,6 +93,10 @@ rsync -a "$REPO/models/" "$DEST/models/"
 
 # El visor web, si ya existe.
 [[ -d "$REPO/web" ]] && rsync -a "$REPO/web/" "$DEST/web/"
+
+# Los scripts de diagnóstico. Van porque `diag.bat` los corre desde el destino,
+# no desde el repo: del lado Windows no hay un WSL montado donde buscarlos.
+rsync -a --delete --exclude '__pycache__' "$REPO/scripts/" "$DEST/scripts/"
 
 # Lanzadores nativos. Se generan acá para que la ruta del venv quede fija y no
 # haya que acordarse del PYTHONPATH a mano.
@@ -180,15 +190,104 @@ BAT
 
 # Los .bat se escriben con un marcador y se sustituye acá, para que la ruta del
 # venv salga de la variable y no esté hardcodeada en el heredoc.
-VENV_WIN="$(printf '%s' "$VENV" | sed 's|^/mnt/\(.\)/|\U\1:/|' | tr '/' '\\')"
+winpath() { printf '%s' "$1" | sed 's|^/mnt/\(.\)/|\U\1:/|' | tr '/' '\\'; }
+VENV_WIN="$(winpath "$VENV")"
+DEST_WIN="$(winpath "$DEST")"
+
+# Las barras invertidas de una ruta de Windows son metacaracteres en el lado
+# DERECHO de un `s|||` de sed: `\U` pasa a mayúsculas, `\t` es un tabulador,
+# `\E` corta el modo. Sin escaparlas,
+#   C:\Users\tronc\OneDrive\Escritorio\...
+# se escribía
+#   C:SERS<TAB>RONCONEDRIVEscritorio...
+# y el .bat apuntaba a un venv inexistente. Nada falla al desplegar: falla
+# cuando hacés doble click, y el error que ves no menciona ninguna ruta.
+VENV_WIN_SED="${VENV_WIN//\\/\\\\}"
 for bat in "$DEST"/*.bat; do
-  [ -f "$bat" ] && sed -i "s|__VENV_WIN__|$VENV_WIN|g" "$bat"
+  [ -f "$bat" ] && sed -i "s|__VENV_WIN__|$VENV_WIN_SED|g" "$bat"
 done
 
+# Y se verifica, porque el modo de falla de arriba es silencioso: el .bat
+# queda escrito igual, con una ruta rota adentro.
+if grep -lq '__VENV_WIN__' "$DEST"/*.bat 2>/dev/null; then
+  echo "ERROR: quedaron marcadores sin reemplazar en los .bat" >&2
+  exit 1
+fi
+if ! grep -qxF "set VENV=$VENV_WIN" "$DEST/jarbis.bat"; then
+  echo "ERROR: la ruta del venv se escribió mal en jarbis.bat" >&2
+  echo "       esperaba: set VENV=$VENV_WIN" >&2
+  grep -n '^set VENV=' "$DEST/jarbis.bat" >&2
+  exit 1
+fi
+
+# El ícono: lo usa el acceso directo. Uno genérico en un escritorio lleno no se
+# encuentra, y entonces la puerta de vuelta existe pero no se usa.
+[[ -f "$REPO/assets/jarbis.ico" ]] && cp "$REPO/assets/jarbis.ico" "$DEST/jarbis.ico"
+
+# ── accesos directos ────────────────────────────────────────────────────────
+#
+# Queda en el destino, no sólo acá: así se puede cambiar de idea sin volver a
+# desplegar nada.
+#
+#   powershell -File shortcuts.ps1 -Autostart     prende el arranque automático
+#   powershell -File shortcuts.ps1 -NoAutostart   lo apaga
+cat > "$DEST/shortcuts.ps1" <<PS1
+# Accesos directos de Jarbis. Generado por scripts/deploy-body.sh.
+param([switch]\$Autostart, [switch]\$NoAutostart, [switch]\$NoDesktop)
+
+\$dest   = "$DEST_WIN"
+\$target = Join-Path \$dest "jarbis-silencioso.vbs"
+\$icon   = Join-Path \$dest "jarbis.ico"
+
+function Set-JarbisShortcut(\$folder) {
+  \$path = Join-Path \$folder "Jarbis.lnk"
+  \$shell = New-Object -ComObject WScript.Shell
+  \$lnk = \$shell.CreateShortcut(\$path)
+  \$lnk.TargetPath = \$target
+  \$lnk.WorkingDirectory = \$dest
+  if (Test-Path \$icon) { \$lnk.IconLocation = "\$icon,0" }
+  \$lnk.Description = "Jarbis - tu agente, con cuerpo"
+  \$lnk.Save()
+  Write-Output "  + \$path"
+}
+
+function Remove-JarbisShortcut(\$folder) {
+  \$path = Join-Path \$folder "Jarbis.lnk"
+  if (-not (Test-Path \$path)) { return }
+  # Sólo se borra el que apunta a ESTE despliegue. Borrar por nombre es borrar
+  # el acceso de otra cosa que se llame igual.
+  \$shell = New-Object -ComObject WScript.Shell
+  if (\$shell.CreateShortcut(\$path).TargetPath -ne \$target) {
+    Write-Output "  ! \$path apunta a otro lado, no lo toco"
+    return
+  }
+  Remove-Item \$path
+  Write-Output "  - \$path"
+}
+
+if (-not \$NoDesktop) { Set-JarbisShortcut ([Environment]::GetFolderPath('Desktop')) }
+
+\$startup = [Environment]::GetFolderPath('Startup')
+if (\$Autostart)        { Set-JarbisShortcut \$startup }
+elseif (\$NoAutostart)  { Remove-JarbisShortcut \$startup }
+PS1
+
+PS_ARGS=()
+[[ "${JARBIS_DESKTOP:-1}" == "0" ]] && PS_ARGS+=("-NoDesktop")
+case "${JARBIS_AUTOSTART:-}" in
+  1) PS_ARGS+=("-Autostart") ;;
+  0) PS_ARGS+=("-NoAutostart") ;;
+esac
+
+echo "  accesos:"
+powershell.exe -NoProfile -ExecutionPolicy Bypass \
+  -File "$DEST_WIN\\shortcuts.ps1" "${PS_ARGS[@]}" 2>&1 | tr -d '\r' || \
+  echo "    (no pude crear los accesos; corré shortcuts.ps1 a mano)"
+
+echo
 echo "  desplegado:"
 find "$DEST" -maxdepth 2 -type f -name '*.py' | sed "s|$DEST/|    |" | head -20
 echo
 echo "  lanzadores: jarbis.bat (todo)  ·  diag.bat (scripts)  ·  run.bat  face.bat  robot.bat  doctor.bat"
 echo
-DEST_WIN="$(printf '%s' "$DEST" | sed 's|^/mnt/\(.\)/|\U\1:/|' | tr '/' '\\')"
 echo "  probá:  cmd.exe /c '$DEST_WIN\\doctor.bat'"
