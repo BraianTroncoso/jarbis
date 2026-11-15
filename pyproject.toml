@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "jarbis-body"
 version = "0.3.0"
-description = "Jarbis: a local voice body for a Claude Code agent — ears, mouth, and a push bridge to the brain"
+description = "Jarbis: your Claude Code agent with a body — a face that lives on your desktop, a live session behind it, and a voice you can turn off"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

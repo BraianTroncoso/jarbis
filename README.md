@@ -1,13 +1,25 @@
 # Jarbis
 
-A local voice body for a Claude Code agent. It listens, it talks, and it can
-speak first.
+**Your Claude Code agent, with a body.**
 
-The agent already existed as a brain: [MyJarbis](https://github.com/BraianTroncoso/myjarbis)
-for memory, skills for style, Claude Code for thinking. What it had no way of
-doing was hearing, speaking, or — above all — **starting** a conversation.
+It already thought and remembered:
+[MyJarbis](https://github.com/BraianTroncoso/myjarbis) for memory, skills for
+style, Claude Code for the thinking. What it had no way of doing was *being
+there* — present while you work, reachable without opening a terminal, and able
+to start a conversation instead of waiting to be launched.
+
+Jarbis is that missing half. A small face that lives on top of your desktop all
+day, with a live session behind it that keeps its memory between turns. You
+click it and it listens. It answers out loud — and if you would rather it
+didn't, you mute it and it answers in writing instead.
 
 ![The five states of the robot](docs/images/states-dark.png)
+
+**The voice is a layer, not the product.** It is the fastest way to reach
+something that is already on screen, and it is genuinely good: a wake word, a
+real VAD, Whisper and a natural-sounding voice, all running locally. But it is
+one channel into an agent that thinks, remembers and acts — turn it off and the
+agent is still there.
 
 Everything runs on your machine. Nothing leaves it except the Claude API calls
 the agent makes on its own.
@@ -26,7 +38,8 @@ of the flow.
 
 Here the body opens a WebSocket and emits events as they happen. That enables the
 two things that could not exist before: answering without being polled, and
-speaking up without being spoken to.
+speaking up without being spoken to. Which is also what separates something you
+*invoke* from something that is simply **there**.
 
 <p align="center">
   <img src="docs/media/architecture.png" width="940" alt="Jarbis architecture — the body (wake word, Silero VAD, Whisper, Piper) pushes over WebSocket to the brain (a live Agent SDK session with MyJarbis), whose every tool call passes the PreToolUse gate; the robot, the face and the supervisor sit alongside, reading the state file and sending commands back">
@@ -213,8 +226,14 @@ compare against the original text. That closes the loop with nobody talking.
 
 ## Known limits
 
-- **It is barely proactive.** The only wired trigger is the morning greeting, and
-  it ships disabled. The reflex has its filters and its tests but no sensors.
+- **It is barely proactive yet.** Speaking first is wired end to end — the push
+  bridge, the filters that decide when it would be rude, the tests — but only
+  one trigger is plugged into it, the morning greeting, and that ships disabled.
+  The reflex has no sensors. The capability is real; the uses of it are not
+  written.
+- **Voice is the only way in.** Muting turns off the *answer* out loud, not the
+  question: the way you reach it is still to click and talk. Typing to it from
+  the panel is the obvious next thing and is not built.
 - **The wake word is English-only.** The bundled `hey_jarvis.onnx` scores
   0.77-0.95 on English speech and 0.157 on Spanish against a 0.50 threshold, so
   it ships off. Training a Spanish one needs CUDA; the path is documented, the
