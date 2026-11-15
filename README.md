@@ -103,8 +103,8 @@ JARBIS_VENV=/mnt/c/Users/you/some-venv bash scripts/deploy-body.sh
 ```
 
 `deploy-body.sh` finds your Windows profile under `/mnt/c/Users`, writes the
-package there, and generates the launchers. Override anything with
-`JARBIS_WIN_USER`, `JARBIS_DEST` or `JARBIS_VENV`.
+package there, generates the launchers and leaves a shortcut on your desktop.
+Override anything with `JARBIS_WIN_USER`, `JARBIS_DEST` or `JARBIS_VENV`.
 
 The body has to run natively on Windows: WSL has no real microphone (`/dev/snd`
 only exposes `timer`) and PortAudio does not survive the WSLg PulseAudio bridge.
@@ -118,10 +118,34 @@ C:\Users\you\jarbis-body\jarbis.bat           # body · face · robot · brain
 
 `jarbis.bat` is the supervisor: it starts the four components, restarts whatever
 dies with exponential backoff, and launches the brain inside WSL via `wsl.exe`.
-Put a shortcut to `jarbis-silencioso.vbs` in the Startup folder and it comes up
-with Windows, with no console window.
 
 **Click the robot and talk to it.** Hold to talk longer.
+
+### On demand, or always on
+
+Deploying puts a **Jarbis** shortcut on your desktop and, by default, touches
+nothing else. Autostart is a choice you make, not something that happens to you:
+
+```bash
+JARBIS_AUTOSTART=1 bash scripts/deploy-body.sh   # also starts with Windows
+JARBIS_AUTOSTART=0 bash scripts/deploy-body.sh   # take it out of Startup
+JARBIS_DESKTOP=0   bash scripts/deploy-body.sh   # no desktop shortcut either
+```
+
+With neither set, whatever is already in your Startup folder stays as it is. You
+can change your mind later without redeploying — `shortcuts.ps1` ships next to
+the launchers and takes `-Autostart` / `-NoAutostart`.
+
+### Closing it closes it
+
+**Cerrar Jarbis** in the right-click menu shuts the whole thing down — the
+robot, the panel, the body with Whisper loaded in memory, and the brain session.
+It does not come back on its own. The desktop shortcut is how you call it back.
+
+That sounds obvious and it was not: a supervisor that restarts everything that
+dies restarts the thing you just closed, because from the outside *closing looks
+exactly like crashing*. The robot now exits with a reserved code when you are the
+one closing it, and that is the only difference the supervisor needs.
 
 ### A note on WSL networking
 
@@ -171,10 +195,12 @@ brain/
   client.py     transport: bridge ↔ engine
   engine.py     Agent SDK (live session) · subprocess (fallback) · escalation
 hooks/          gate.py (decides) · audit.py (logs) · settings.json
+assets/         jarbis.ico, generated from the same geometry as the face
 web/index.html  the panel
 scripts/        fetch-models · deploy-body · bench_voice · bench_brain ·
-                tune_stt · compare_stt · diag_wakeword · preview_robot
-tests/          199 tests, none of them need a microphone
+                tune_stt · compare_stt · diag_wakeword · preview_robot ·
+                make_icon
+tests/          213 tests, none of them need a microphone
 ```
 
 ### The audio layer is inherited
@@ -207,7 +233,7 @@ It has been tested against a real `rm -rf`.
 ## Tests
 
 ```bash
-python3 -m pytest tests/ -q          # 199 tests, no microphone needed
+python3 -m pytest tests/ -q          # 213 tests, no microphone needed
 ```
 
 The calibration benches do need the Windows environment:

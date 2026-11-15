@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from jarbis_body import EXIT_USER_QUIT
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -27,10 +29,13 @@ def main() -> int:
         return 1
 
     try:
-        RobotWidget(width=args.width).run()
+        lo_cerraste_vos = RobotWidget(width=args.width).run()
     except KeyboardInterrupt:
-        pass
-    return 0
+        return 0
+
+    # Salir con un código distinto según quién cerró es todo lo que el
+    # supervisor necesita para no reponer un robot que acabás de cerrar.
+    return EXIT_USER_QUIT if lo_cerraste_vos else 0
 
 
 if __name__ == "__main__":

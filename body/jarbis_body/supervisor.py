@@ -25,6 +25,18 @@ Si algo se muere, se reinicia. Con backoff, porque un proceso que falla al
 arrancar en bucle cerrado es peor que uno caído: consume CPU y llena el log.
 Después de varios intentos seguidos se baja los brazos con ese componente y lo
 deja anotado, en vez de reintentar para siempre.
+
+## La excepción, que es la que importa
+
+Reponer todo lo que se muere tiene un agujero: **cerrar también es morirse**.
+El robot salía del menú, el supervisor lo veía caído y lo reponía dos segundos
+después; cerrarlo era pedirle que volviera. Un supervisor que no distingue un
+cierre de una caída no te deja apagar nada.
+
+Por eso hay un código de salida reservado (`EXIT_USER_QUIT`). Si un componente
+sale con ése, no se repone y además se baja todo lo demás: el que lo cerró
+quería apagar Jarbis, no reiniciarle una pieza. Para volver está el acceso del
+escritorio.
 """
 
 from __future__ import annotations
@@ -37,6 +49,8 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from jarbis_body import EXIT_USER_QUIT
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,6 +97,7 @@ class Supervisor:
     def __init__(self, components: list[Component]) -> None:
         self.components = components
         self._stopping = False
+        self._closed_by_user = False
 
     # ------------------------------------------------------------------ arranque
 
@@ -140,6 +155,8 @@ class Supervisor:
             log.info("Bajando")
 
         self.shutdown()
+        if self._closed_by_user:
+            log.info("Jarbis apagado. Para volver: el acceso del escritorio.")
         return 0
 
     def _check(self) -> None:
@@ -158,8 +175,16 @@ class Supervisor:
 
             if component.proc is not None:
                 code = component.proc.poll()
-                log.warning(f"{component.name}: se murió (código {code})")
                 component.proc = None
+
+                if code == EXIT_USER_QUIT:
+                    log.info(f"{component.name}: lo cerraste vos. Bajo Jarbis.")
+                    component.dead = True
+                    self._stopping = True
+                    self._closed_by_user = True
+                    return
+
+                log.warning(f"{component.name}: se murió (código {code})")
                 component.fails += 1
                 component.next_try = ahora + component.backoff()
 

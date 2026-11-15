@@ -91,6 +91,9 @@ class RobotWidget:
         self._win_x = 0
         self._win_y = 0
 
+        # La diferencia entre "me cerraron" y "me morí". La lee el supervisor.
+        self.closed_by_user = False
+
         self._build()
 
     # ========================================================================
@@ -257,6 +260,10 @@ class RobotWidget:
             Item("Silenciar", self._toggle_mute, toggle=self._muted),
             Item(),
             Item("Cerrar Jarbis", self.quit),
+            # Cerrar ahora baja todo y no vuelve solo, así que el menú tiene
+            # que decir dónde está la puerta de vuelta. Sin acción: es un
+            # renglón apagado, no un ítem.
+            Item("vuelve desde el escritorio"),
         ])
 
     def _open_panel(self) -> None:
@@ -406,12 +413,16 @@ class RobotWidget:
     # Ciclo de vida
     # ========================================================================
 
-    def run(self) -> None:
+    def run(self) -> bool:
+        """Corre hasta que se cierre. Devuelve si lo cerraste vos."""
         self._poll_state()
         self._animate()
         self.root.mainloop()
+        return self.closed_by_user
 
     def quit(self) -> None:
+        """Cerrar de verdad: baja el robot y, con él, Jarbis entero."""
+        self.closed_by_user = True
         self._save_position()
         self.menu.close()
         try:

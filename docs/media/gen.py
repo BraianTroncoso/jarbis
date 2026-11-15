@@ -274,14 +274,15 @@ def architecture():
            weight="bold", spacing=1.2)
     s.text(SIDE_X + 24, y + 56, "Starts the four and restarts", size=11.5,
            fill=DIM)
-    s.text(SIDE_X + 24, y + 72, "whatever dies, with backoff", size=11.5,
+    s.text(SIDE_X + 24, y + 72, "whatever dies — except what", size=11.5,
            fill=DIM)
-    s.text(SIDE_X + 24, y + 88, "capped at 30 seconds.", size=11.5, fill=DIM)
-    s.text(SIDE_X + 24, y + 120, "body · face · robot · brain", size=11,
+    s.text(SIDE_X + 24, y + 88, "you closed on purpose.", size=11.5, fill=DIM)
+    s.text(SIDE_X + 24, y + 118, "body · face · robot · brain", size=11,
            fill=DIM, font=MONO)
-    s.text(SIDE_X + 24, y + 152, "jarbis.bat", size=12.5, fill=MINT, font=MONO)
-    s.text(SIDE_X + 24, y + 172, "comes up with Windows,", size=11, fill=FAINT)
-    s.text(SIDE_X + 24, y + 188, "with no console window.", size=11, fill=FAINT)
+    s.text(SIDE_X + 24, y + 150, "jarbis.bat", size=12.5, fill=MINT, font=MONO)
+    s.text(SIDE_X + 24, y + 170, "from the desktop shortcut;", size=11,
+           fill=FAINT)
+    s.text(SIDE_X + 24, y + 186, "autostart is opt-in.", size=11, fill=FAINT)
 
     s.text(PAD, H - 16,
            "Both ways would be one arrow in an MCP diagram — and it would point "

@@ -12,3 +12,12 @@ mismas; lo que cambió es la dirección del flujo. Antes el cerebro preguntaba
 """
 
 __version__ = "0.3.0"
+
+# Código de salida que significa "lo cerré yo, a propósito".
+#
+# El supervisor repone todo lo que se muere, que es exactamente lo que querés
+# cuando algo se cae — y exactamente lo que NO querés cuando cerraste el robot
+# a mano: lo cerrabas y volvía a aparecer dos segundos después. Un código de
+# salida es la forma más barata de separar las dos cosas: ya viaja de hijo a
+# padre, no necesita archivo ni socket, y no puede quedar viejo en disco.
+EXIT_USER_QUIT = 42
