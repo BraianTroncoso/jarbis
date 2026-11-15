@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarbis</title>
+<style>
+  /* La cara mínima. Pensada para vivir en una ventana angosta al costado de la
+     pantalla, no para ser una app. Fondo transparente a propósito: si mañana
+     esto pasa a un Tauri con ventana sin bordes, el CSS ya sirve. */
+  :root {
+    --bg: #0c0c10;
+    --panel: #15151d;
+    --line: #26263340;
+    --text: #e8e8f0;
+    --dim: #8a8a9c;
+    --accent: #4a4a55;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; }
+  body {
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+    padding: 12px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px #00000080;
+  }
+
+  /* Cabecera: el pulso de estado es toda la información que necesitás de un
+     vistazo, sin leer nada. */
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    flex: 0 0 auto;
+    transition: background .25s, box-shadow .25s;
+  }
+  .dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .45; transform: scale(.82); }
+  }
+  .name { font-weight: 600; letter-spacing: .4px; }
+  .state { color: var(--dim); font-size: 12px; margin-left: auto; text-transform: lowercase; }
+
+  /* Cuerpo: lo que escuchó y lo que contestó. Dos bloques, nada más. */
+  .body { padding: 4px 14px 12px; }
+  .row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .label {
+    font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 4px;
+  }
+  .value { word-wrap: break-word; }
+  .value.empty { color: var(--accent); font-style: italic; }
+  .said { color: #bcd4ff; }
+
+  /* El botón. Existe porque Ctrl+Shift+G lo intercepta el "buscar siguiente"
+     del navegador, así que la hotkey global no sirve con el visor en foco. */
+  .actions { padding: 2px 14px 14px; }
+  button {
+    width: 100%;
+    padding: 13px;
+    font: 600 15px/1 inherit;
+    color: #0c0c10;
+    background: var(--text);
+    border: 0; border-radius: 10px;
+    cursor: pointer;
+    transition: background .18s, opacity .18s, transform .06s;
+  }
+  button:hover:not(:disabled) { background: #fff; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.cut { background: #ff2d75; color: #fff; }
+  button.cut:hover { background: #ff5490; }
+  .hint {
+    margin-top: 7px;
+    font-size: 11px; color: var(--dim); text-align: center;
+  }
+  .hint kbd {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; font: inherit; font-size: 10px;
+  }
+  .err { color: #ff2d75; }
+
+  /* Los dos interruptores de modo. El estado real lo manda el cuerpo en el
+     archivo de estado, así que la cara los refleja en vez de recordarlos. */
+  .modes { padding: 4px 14px 8px; display: grid; gap: 7px; }
+  .mode {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12px; color: var(--dim);
+    cursor: pointer; user-select: none;
+  }
+  .mode input { appearance: none; margin: 0; flex: 0 0 auto; }
+  .mode input::before {
+    content: ""; display: block;
+    width: 32px; height: 18px; border-radius: 9px;
+    background: var(--panel); border: 1px solid var(--line);
+    transition: background .18s;
+  }
+  .mode input::after {
+    content: ""; display: block;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent);
+    position: relative; top: -15px; left: 3px;
+    transition: transform .18s, background .18s;
+  }
+  .mode input:checked::before { background: #2de2a633; border-color: #2de2a655; }
+  .mode input:checked::after { background: #2de2a6; transform: translateX(14px); }
+  .mode input:checked ~ span { color: var(--text); }
+
+  footer {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    padding: 9px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 11px; color: var(--dim);
+  }
+  footer b { color: var(--text); font-weight: 600; }
+  .stale { color: #ffb02e; }
+  .offline .dot { background: #ff2d75 !important; animation: none; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <header>
+    <div class="dot" id="dot"></div>
+    <div class="name">Jarbis</div>
+    <div class="state" id="state">conectando</div>
+  </header>
+
+  <div class="body">
+    <div class="row">
+      <div class="label">te escuché</div>
+      <div class="value empty" id="heard">todavía nada</div>
+    </div>
+    <div class="row">
+      <div class="label">contesté</div>
+      <div class="value said empty" id="said">todavía nada</div>
+    </div>
+  </div>
+
+  <div class="modes">
+    <label class="mode">
+      <input type="checkbox" id="ptt">
+      <span>Mantener apretado para hablar</span>
+    </label>
+    <label class="mode">
+      <input type="checkbox" id="followup">
+      <span>Seguir conversando al contestar</span>
+    </label>
+    <label class="mode">
+      <input type="checkbox" id="greeting">
+      <span>Saludarme a la mañana</span>
+    </label>
+  </div>
+
+  <div class="actions">
+    <button id="action" disabled>...</button>
+    <div class="hint" id="hint">o apretá <kbd>espacio</kbd> con esta ventana en foco</div>
+  </div>
+
+  <footer>
+    <span>turnos <b id="turns">0</b></span>
+    <span>latencia <b id="latency">—</b></span>
+    <span>voz <b id="voice">—</b></span>
+    <span id="age">—</span>
+  </footer>
+</div>
+
+<script>
+// Polling, no websocket. Es deliberado: el visor tiene que poder abrirse,
+// cerrarse y recargarse sin que el cuerpo se entere, y mostrar el último estado
+// conocido cuando el cuerpo está apagado en vez de quedarse en blanco.
+// Es el mismo patrón que ya funciona en claude-spirit-box.
+const POLL_MS = 300;
+// Si el archivo de estado no se actualiza en este tiempo, el cuerpo está caído.
+const STALE_MS = 5000;
+
+const el = (id) => document.getElementById(id);
+
+function setValue(node, text) {
+  const empty = !text;
+  node.textContent = empty ? "todavía nada" : text;
+  node.classList.toggle("empty", empty);
+}
+
+function humanAge(ms) {
+  if (ms < 1500) return "ahora";
+  if (ms < 60000) return `hace ${Math.round(ms / 1000)}s`;
+  if (ms < 3600000) return `hace ${Math.round(ms / 60000)}min`;
+  return `hace ${Math.round(ms / 3600000)}h`;
+}
+
+async function tick() {
+  let data;
+  try {
+    // cache-busting: sin esto el navegador sirve el JSON viejo.
+    const res = await fetch(`/state.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    data = await res.json();
+  } catch (err) {
+    el("card").classList.add("offline");
+    el("state").textContent = "cuerpo apagado";
+    return;
+  }
+
+  const updated = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+  const age = updated ? Date.now() - updated : Infinity;
+  const stale = age > STALE_MS;
+
+  el("card").classList.toggle("offline", stale);
+
+  el("state").textContent = stale
+    ? "sin señal del cuerpo"
+    : (data.description || data.state || "?");
+
+  const dot = el("dot");
+  dot.style.background = data.color || "var(--accent)";
+  // El pulso solo cuando está haciendo algo: dormido tiene que verse quieto.
+  const activo = !stale && ["escuchando", "pensando", "hablando"].includes(data.state);
+  dot.classList.toggle("pulse", activo);
+  dot.style.boxShadow = activo ? `0 0 12px ${data.color}` : "none";
+
+  setValue(el("heard"), data.heard);
+  setValue(el("said"), data.said);
+
+  el("turns").textContent = data.turns ?? 0;
+  el("latency").textContent = data.latency_ms ? `${(data.latency_ms / 1000).toFixed(1)}s` : "—";
+  el("voice").textContent = data.voice || "—";
+
+  const ageNode = el("age");
+  ageNode.textContent = updated ? humanAge(age) : "—";
+  ageNode.classList.toggle("stale", stale);
+
+  document.title = activo ? `Jarbis · ${data.state}` : "Jarbis";
+
+  // El modo lo dicta el cuerpo, no el navegador: así dos pestañas abiertas
+  // muestran lo mismo y recargar no pierde la configuración.
+  syncSwitch("ptt", data.ptt);
+  syncSwitch("followup", data.follow_up);
+  syncSwitch("greeting", data.greeting);
+  ptt = Boolean(data.ptt);
+
+  updateButton(stale ? null : data.state);
+}
+
+function syncSwitch(id, value) {
+  const node = el(id);
+  // No se pisa mientras lo estás tocando: evita que el polling le gane al POST.
+  if (node === document.activeElement) return;
+  const want = Boolean(value);
+  if (node.checked !== want) node.checked = want;
+}
+
+// ---------------------------------------------------------------- el botón
+
+// Qué hace el botón en cada estado. `cmd` null = deshabilitado.
+// En modo "mantener apretado" el estado dormido se maneja aparte: ahí el botón
+// no es un click sino un mantener, así que su comando se decide en los handlers.
+const ACTIONS = {
+  dormido:    { label: "Hablar",      cmd: "listen", cut: false },
+  escuchando: { label: "Cancelar",    cmd: "sleep",  cut: true  },
+  pensando:   { label: "Pensando...", cmd: null,     cut: false },
+  hablando:   { label: "Cortar",      cmd: "stop",   cut: true  },
+  error:      { label: "Reintentar",  cmd: "sleep",  cut: false },
+};
+
+let current = null;     // comando del click, en modo automático
+let busy = false;       // hay un POST en vuelo
+let ptt = false;        // modo mantener-apretado, lo dicta el cuerpo
+let holding = false;    // el botón está apretado ahora mismo
+let state = null;
+
+function updateButton(st) {
+  const btn = el("action");
+  state = st;
+
+  if (st === null) {
+    current = null;
+    btn.textContent = "cuerpo apagado";
+    btn.disabled = true;
+    btn.classList.remove("cut");
+    return;
+  }
+
+  // Mantener apretado: el botón describe el gesto, no una acción puntual.
+  if (ptt && (st === "dormido" || st === "escuchando")) {
+    current = null;
+    btn.textContent = holding || st === "escuchando"
+      ? "Soltá para enviar"
+      : "Mantené apretado";
+    btn.disabled = busy && !holding;
+    btn.classList.toggle("cut", st === "escuchando");
+    return;
+  }
+
+  const action = ACTIONS[st] || ACTIONS.dormido;
+  current = action.cmd;
+  btn.textContent = action.label;
+  btn.disabled = busy || action.cmd === null;
+  btn.classList.toggle("cut", action.cut);
+}
+
+async function send(command, payload) {
+  if (!command) return;
+  el("hint").classList.remove("err");
+
+  try {
+    const res = await fetch(`/${command}`, {
+      method: "POST",
+      // El header custom es el anti-CSRF: fuerza preflight, que el servidor no
+      // contesta, así que una página de otro sitio no puede abrirte el micrófono.
+      headers: { "X-Jarbis": "1", "Content-Type": "application/json" },
+      body: payload ? JSON.stringify(payload) : undefined,
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.detail || "falló");
+    el("hint").textContent = hintText();
+    return true;
+  } catch (err) {
+    el("hint").textContent = String(err.message || err);
+    el("hint").classList.add("err");
+    return false;
+  }
+}
+
+function hintText() {
+  return ptt
+    ? "mantené apretado espacio mientras hablás"
+    : "o apretá espacio con esta ventana en foco";
+}
+
+async function click(command) {
+  if (!command || busy) return;
+  busy = true;
+  updateButton(state);
+  await send(command);
+  busy = false;
+  tick();
+}
+
+// --- mantener apretado ---------------------------------------------------
+// Abrir al apretar, cerrar al soltar. El VAD no interviene: el cuerpo pone
+// `auto_close = false` cuando está en este modo, así que el turno dura
+// exactamente lo que tengas el botón abajo.
+
+async function holdStart() {
+  if (!ptt || holding || busy) return;
+  if (state !== "dormido") return;
+  holding = true;
+  updateButton(state);
+  await send("listen");
+}
+
+async function holdEnd() {
+  if (!holding) return;
+  holding = false;
+  updateButton(state);
+  await send("close");
+  tick();
+}
+
+const btn = el("action");
+
+btn.addEventListener("click", () => { if (!ptt) click(current); });
+btn.addEventListener("mousedown", (ev) => { if (ptt) { ev.preventDefault(); holdStart(); } });
+btn.addEventListener("mouseup", () => { if (ptt) holdEnd(); });
+// Si arrastrás el mouse afuera con el botón abajo, el mouseup se pierde. Sin
+// esto el turno quedaría abierto hasta el tope de 90 s.
+btn.addEventListener("mouseleave", () => { if (ptt && holding) holdEnd(); });
+btn.addEventListener("touchstart", (ev) => { if (ptt) { ev.preventDefault(); holdStart(); } });
+btn.addEventListener("touchend", (ev) => { if (ptt) { ev.preventDefault(); holdEnd(); } });
+
+// --- teclado --------------------------------------------------------------
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.code !== "Space" && ev.code !== "Enter") return;
+  ev.preventDefault();
+  // `repeat` dispara decenas de veces mientras mantenés la tecla.
+  if (ev.repeat) return;
+  if (ptt) holdStart();
+  else click(current);
+});
+
+document.addEventListener("keyup", (ev) => {
+  if (ev.code !== "Space" && ev.code !== "Enter") return;
+  ev.preventDefault();
+  if (ptt) holdEnd();
+});
+
+// Perder el foco con la tecla o el botón abajo dejaría el turno abierto.
+window.addEventListener("blur", () => { if (holding) holdEnd(); });
+
+// --- los interruptores de modo -------------------------------------------
+
+el("ptt").addEventListener("change", (ev) =>
+  send("mode", { ptt: ev.target.checked })
+);
+el("followup").addEventListener("change", (ev) =>
+  send("mode", { follow_up: ev.target.checked })
+);
+el("greeting").addEventListener("change", (ev) =>
+  send("mode", { greeting: ev.target.checked })
+);
+
+tick();
+setInterval(tick, POLL_MS);
+</script>
+</body>
+</html>
