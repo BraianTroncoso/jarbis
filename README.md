@@ -9,11 +9,12 @@ there* — present while you work, reachable without opening a terminal, and abl
 to start a conversation instead of waiting to be launched.
 
 Jarbis is that missing half. A small face that lives on top of your desktop all
-day, with a live session behind it that keeps its memory between turns. You
-click it and it listens. It answers out loud — and if you would rather it
-didn't, you mute it and it answers in writing instead.
+day, with a live session behind it that keeps its memory between turns. It
+follows your cursor, blinks, and looks away now and then. You click it and it
+listens. It answers out loud — and if you would rather it didn't, you mute it
+and it answers in writing instead.
 
-![The five states of the robot](docs/images/states-dark.png)
+![The six states of the robot](docs/images/states-dark.png)
 
 **The voice is a layer, not the product.** It is the fastest way to reach
 something that is already on screen, and it is genuinely good: a wake word, a
@@ -63,6 +64,8 @@ rectangle with a drawing inside it.
 The menu is drawn on a canvas instead of inherited from the OS, so it matches the
 rest: same dark, same rounded corners, same accent.
 
+- **come near it** → it wakes up: eyes open, following your cursor. Waking is
+  not listening — the mic stays shut
 - **click** → opens the mic; the VAD closes the turn when you stop talking
 - **click and hold** → records for as long as you hold it
 - **drag** → moves it; the position is remembered
@@ -71,6 +74,31 @@ rest: same dark, same rounded corners, same accent.
 
 The robot reads the same `jarbis-state.json` the web panel does. No second
 socket, no startup ordering problem.
+
+### Awake is not listening
+
+Until recently there was asleep and there was listening, with nothing in
+between — so the only way to make it look alive was to make it listen, which is
+exactly what you don't want from something that sits on your screen all day.
+
+**Awake** is the state that was missing. Eyes open, mic shut. It follows your
+cursor, blinks at irregular intervals (a regular blink reads as a metronome),
+glances away every half-minute or so, and breathes on a six-second cycle. After
+30 seconds without you it closes its eyes again.
+
+The Clippy lesson, stated properly: what made the Office assistant charming was
+that it had a life of its own when nothing was happening. What made it hated was
+that it *interrupted*. This is the first half and none of the second — the robot
+never starts a conversation. That is still the reflex's job, and the reflex has
+no sensors on purpose.
+
+Two things worth knowing about how it is built:
+
+- **Awake lives in the robot, not in the body.** Waking is a way of being drawn,
+  not a way of being put to work. No new state in the body's state machine, no
+  new field in the state file, no lie to keep in sync.
+- **Sleeping now costs less than it used to.** The widget animated at 20 fps
+  with its eyes closed; asleep it drops to 4.
 
 On a light desktop:
 
@@ -183,7 +211,8 @@ stayed.
 ```
 body/jarbis_body/
   audio/        wake word, Silero VAD, STT, TTS, presence, hotkey, resampling
-  robot/        shape (geometry) · render (drawing) · widget (window) · menu
+  robot/        shape (geometry) · render (drawing) · widget (window) · menu ·
+                idle (the life it has when nothing is happening)
   state/        state machine, and the writer the robot and the panel read
   bridge/       protocol, push server, command client, network binding
   orchestrator.py   wires it together
@@ -200,7 +229,7 @@ web/index.html  the panel
 scripts/        fetch-models · deploy-body · bench_voice · bench_brain ·
                 tune_stt · compare_stt · diag_wakeword · preview_robot ·
                 make_icon
-tests/          213 tests, none of them need a microphone
+tests/          253 tests, none of them need a microphone
 ```
 
 ### The audio layer is inherited
@@ -233,7 +262,7 @@ It has been tested against a real `rm -rf`.
 ## Tests
 
 ```bash
-python3 -m pytest tests/ -q          # 213 tests, no microphone needed
+python3 -m pytest tests/ -q          # 253 tests, no microphone needed
 ```
 
 The calibration benches do need the Windows environment:

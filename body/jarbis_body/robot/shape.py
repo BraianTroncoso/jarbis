@@ -35,6 +35,10 @@ EYE_LEFT_X = 41.0
 EYE_RIGHT_X = 87.0
 EYE_Y = 43.0
 EYE_RADIUS = 7.0
+# Cuánto se corre cada ojo cuando la mirada está al tope, en unidades de la
+# pantalla. Poco a propósito: el ojo tiene que seguirte, no pasearse.
+GAZE_X = 5.0
+GAZE_Y = 3.0
 
 # La onda de voz, debajo de los ojos cuando habla.
 WAVE_BARS = 7
@@ -78,6 +82,9 @@ class Palette:
     edge: str       # el borde de la pantalla
     glow: bool      # si el borde late
     bubble: str     # el borde del globo de diálogo
+    # Cuánto late. Despierto respira, no palpita: con la misma amplitud que
+    # escuchando, estar en reposo se vería igual de urgente que estar atento.
+    glow_amp: float = 1.0
 
 
 # Verde, naranja y celeste son los mismos que usa el panel web, para que las dos
@@ -87,6 +94,11 @@ DMETER = "#f73d8f"
 
 PALETTES: dict[str, Palette] = {
     "dormido": Palette(led="#3d3d47", edge=SCREEN_EDGE, glow=False, bubble="#3b3842"),
+    # Despierto es a propósito el único desaturado de la paleta: dice
+    # "encendido", no "pasa algo". Los cuatro colores fuertes se guardan para
+    # cuando efectivamente pasa algo.
+    "despierto": Palette(led="#aeb6d8", edge="#6f76a0", glow=True,
+                         bubble="#6f76a0", glow_amp=0.45),
     "escuchando": Palette(led="#2de2a6", edge="#2de2a6", glow=True, bubble="#2de2a6"),
     "pensando": Palette(led="#ffb02e", edge="#ffb02e", glow=True, bubble="#ffb02e"),
     "hablando": Palette(led="#4aa8ff", edge="#4aa8ff", glow=True, bubble="#4aa8ff"),
@@ -101,6 +113,8 @@ PALETTES: dict[str, Palette] = {
 # Hablando: abiertos, con la onda de voz debajo.
 EYES: dict[str, EyeShape] = {
     "dormido": EyeShape(height=5.0),
+    # Abiertos pero tranquilos: más que pensando, menos que escuchando.
+    "despierto": EyeShape(height=24.0),
     "escuchando": EyeShape(height=34.0),
     "pensando": EyeShape(height=13.0, offset_y=7.0),
     "hablando": EyeShape(height=28.0, offset_y=-4.0),

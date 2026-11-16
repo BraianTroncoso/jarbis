@@ -34,6 +34,7 @@ from typing import Any
 from jarbis_body.bridge.command import BridgeCommand
 from jarbis_body.config import settings
 from jarbis_body.robot import render, shape
+from jarbis_body.robot.idle import IdleLife
 from jarbis_body.robot.menu import Item, RobotMenu
 
 # Cada cuánto se relee el archivo de estado. Igual que el panel web.
@@ -41,6 +42,9 @@ STATE_MS = 300
 # 20 fps: alcanza para un parpadeo y una onda, y deja la CPU tranquila. Esto
 # corre todo el día.
 ANIM_MS = 50
+# Dormido no hay nada que animar, así que se baja a 4 fps. Antes dibujaba a 20
+# con los ojos cerrados: estar en reposo costaba lo mismo que estar atento.
+ANIM_SLEEP_MS = 250
 
 # Cuánto queda el globo en pantalla.
 BUBBLE_MS = 7000
@@ -66,6 +70,7 @@ class RobotWidget:
         self._scale = shape.scale_for(width)
         self._state_file = state_file or settings.state_file
         self._position_file = position_file or (settings.var_dir / "robot-pos.json")
+        self._quit_mark = settings.var_dir / "quit.mark"
         self._command = BridgeCommand(kind="robot")
 
         # Estado leído del cuerpo.
@@ -90,6 +95,13 @@ class RobotWidget:
         self._dragging = False
         self._win_x = 0
         self._win_y = 0
+
+        # La vida en reposo: mirada, parpadeo y respiración. Vive aparte y sin
+        # tkinter para poder probarla.
+        self._life = IdleLife()
+        self._vida = self._life.update(self._now(), None, (0.0, 0.0))
+        self._awake = False
+        self._last_tick = self._now()
 
         # La diferencia entre "me cerraron" y "me morí". La lee el supervisor.
         self.closed_by_user = False
@@ -187,6 +199,7 @@ class RobotWidget:
     # ========================================================================
 
     def _on_press(self, event: tk.Event) -> None:
+        self._life.saw_you(self._now())
         """
         Apretaste. Todavía no se sabe si es click o mantener, así que se agenda:
         si a los 350 ms seguís apretando, es push-to-talk.
@@ -229,6 +242,7 @@ class RobotWidget:
         self._open_panel()
 
     def _on_right_press(self, event: tk.Event) -> None:
+        self._life.saw_you(self._now())
         self._press_x, self._press_y = event.x_root, event.y_root
         self._dragging = False
         self._win_x = self.root.winfo_x()
@@ -344,30 +358,73 @@ class RobotWidget:
     # Dibujo
     # ========================================================================
 
+    def _face_center(self) -> tuple[float, float]:
+        """El centro de la carita en coordenadas de pantalla.
+
+        No es el centro de la ventana: arriba hay reservado el alto del globo,
+        así que el centro geométrico cae por encima de la cara y la mirada
+        quedaría corrida hacia abajo todo el tiempo.
+        """
+        return (
+            self.root.winfo_rootx() + self._dx + shape.SCREEN_W * self._scale / 2,
+            self.root.winfo_rooty() + self._dy + shape.SCREEN_H * self._scale / 2,
+        )
+
+    def _cursor(self) -> tuple[float, float] | None:
+        try:
+            x, y = self.root.winfo_pointerxy()
+        except tk.TclError:
+            return None
+        # Tk devuelve (-1, -1) cuando el puntero no está en esta pantalla.
+        return None if x < 0 or y < 0 else (float(x), float(y))
+
     def _animate(self) -> None:
-        import random
-
         ahora = self._now()
-        self._phase = (self._phase + ANIM_MS / 1500.0) % 1.0
 
-        # Parpadeo: cuando duerme, a intervalos irregulares para que no se
-        # sienta un metrónomo.
-        if self._state == "dormido" and ahora > self._next_blink:
-            self._next_blink = ahora + random.uniform(2.8, 7.0)
-            self._blink_until = ahora + 0.14
+        vida = self._life.update(ahora, self._cursor(), self._face_center())
+        self._awake = vida.awake
+        self._vida = vida
+
+        # El reposo respira más lento que el latido de los estados activos: un
+        # ciclo de seis segundos contra uno de uno y medio. Y el paso sale del
+        # tiempo real, no del intervalo nominal: dormido tickea cinco veces más
+        # lento, así que con un paso fijo el ciclo duraría cinco veces más.
+        dt = max(0.0, min(ahora - self._last_tick, 0.5))
+        self._last_tick = ahora
+        ciclo = 6.0 if self._quieto() else 1.5
+        self._phase = (self._phase + dt / ciclo) % 1.0
 
         self._draw()
-        self.root.after(ANIM_MS, self._animate)
+        self.root.after(
+            ANIM_MS if (self._awake or not self._quieto()) else ANIM_SLEEP_MS,
+            self._animate,
+        )
+
+    def _quieto(self) -> bool:
+        """¿El cuerpo no está haciendo nada? Entonces manda la vida en reposo."""
+        return self._state == "dormido"
 
     def _draw(self) -> None:
         self.canvas.delete("all")
 
-        render.draw_robot(
-            self.canvas, self._state, self._dx, self._dy, self._scale,
-            render.Anim(
+        vida = self._vida
+        # Despierto es una forma de dibujar el reposo, no un estado del cuerpo:
+        # mientras escucha, piensa o habla, la expresión ya está ocupada.
+        estado = self._state
+        anim = render.Anim(phase=self._phase,
+                           blinking=self._now() < self._blink_until)
+        if self._quieto():
+            if vida.awake:
+                estado = "despierto"
+            anim = render.Anim(
                 phase=self._phase,
-                blinking=self._now() < self._blink_until,
-            ),
+                blinking=vida.blinking,
+                gaze_x=vida.gaze_x,
+                gaze_y=vida.gaze_y,
+            )
+
+        render.draw_robot(
+            self.canvas, estado, self._dx, self._dy, self._scale, anim,
         )
 
         if not self._alive:
@@ -423,9 +480,49 @@ class RobotWidget:
     def quit(self) -> None:
         """Cerrar de verdad: baja el robot y, con él, Jarbis entero."""
         self.closed_by_user = True
+        self._leave_quit_mark()
         self._save_position()
         self.menu.close()
         try:
             self.root.destroy()
         except tk.TclError:
+            pass
+
+    def _leave_quit_mark(self) -> None:
+        """
+        La seña que acompaña al código de salida, y el rastro de quién la dejó.
+
+        El código 42 solo no alcanza. Un código de salida es un número que
+        cualquiera puede producir: un proceso que se rompe, un kill, un
+        lanzador que propaga o trunca el código de su hijo. Confiar en el
+        número solo significa que algún día Jarbis se apaga entero y el log
+        dice "lo cerraste vos" sin que hayas tocado nada.
+
+        Por eso el supervisor pide las dos cosas, y esta función se llama
+        desde un solo lugar: el ítem del menú.
+
+        Y además se anota quién llamó. Durante el desarrollo vi dos apagados
+        que no pude reproducir ni explicar; si vuelve a pasar, esto es la
+        diferencia entre un misterio y un archivo con la pila de llamadas.
+        """
+        import time
+        import traceback
+
+        try:
+            self._quit_mark.parent.mkdir(parents=True, exist_ok=True)
+            self._quit_mark.write_text(str(time.time()), encoding="utf-8")
+        except OSError:
+            # Si no se puede escribir, el supervisor repone el robot. Molesto,
+            # pero infinitamente mejor que apagar todo por las dudas.
+            pass
+
+        try:
+            with (settings.var_dir / "robot-quit.log").open(
+                "a", encoding="utf-8"
+            ) as handle:
+                handle.write(
+                    f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"
+                    + "".join(traceback.format_stack()[:-1])
+                )
+        except OSError:
             pass

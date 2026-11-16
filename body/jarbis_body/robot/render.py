@@ -25,6 +25,8 @@ class Anim:
     phase: float = 0.0        # 0..1, para el latido, la onda y los puntitos
     blinking: bool = False    # parpadeo momentáneo
     level: float = 0.0        # 0..1, cuánta voz hay ahora
+    gaze_x: float = 0.0       # -1..1, hacia dónde mira
+    gaze_y: float = 0.0
 
 
 def draw_robot(
@@ -70,7 +72,7 @@ def _draw_glow(canvas, pal, dx, dy, scale, anim) -> None:
         return
 
     extra = 5.0 * scale
-    intensidad = shape.glow_alpha(anim.phase)
+    intensidad = shape.glow_alpha(anim.phase) * pal.glow_amp
     color = shape.mix(shape.SCREEN_BG, pal.edge, 0.22 * intensidad)
 
     canvas.create_polygon(
@@ -96,7 +98,8 @@ def _draw_screen(canvas, pal, dx, dy, scale, anim) -> None:
     borde = pal.edge
     if pal.glow:
         # El borde late junto con el halo, pero más sutil.
-        borde = shape.mix(shape.SCREEN_EDGE, pal.edge, 0.55 + 0.45 * shape.glow_alpha(anim.phase))
+        latido = shape.glow_alpha(anim.phase) * pal.glow_amp
+        borde = shape.mix(shape.SCREEN_EDGE, pal.edge, 0.55 + 0.45 * latido)
 
     canvas.create_polygon(
         puntos, fill=shape.SCREEN_BG, outline=borde, width=max(1.0, 1.6 * scale)
@@ -111,9 +114,14 @@ def _draw_eyes(canvas, state, pal, dx, dy, scale, anim) -> None:
         _draw_cross_eyes(canvas, pal, dx, dy, scale, forma)
         return
 
+    # La mirada mueve los ojos dentro de la pantalla, no la pantalla: lo que
+    # sigue al mouse es el ojo, y el marco se queda quieto.
+    gx = shape.GAZE_X * anim.gaze_x * scale
+    gy = shape.GAZE_Y * anim.gaze_y * scale
+
     radio = min(shape.EYE_RADIUS, forma.height / 2) * scale
     for centro in (shape.EYE_LEFT_X, shape.EYE_RIGHT_X):
-        x0, y0, x1, y1 = shape.eye_box(centro, forma, scale, dx, dy)
+        x0, y0, x1, y1 = shape.eye_box(centro, forma, scale, dx + gx, dy + gy)
         canvas.create_polygon(
             shape.rounded_rect(x0, y0, x1, y1, radio),
             fill=pal.led, outline="",
