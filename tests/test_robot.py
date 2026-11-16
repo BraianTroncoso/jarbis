@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "body"))
 
 from jarbis_body.robot import shape  # noqa: E402
 
-ESTADOS = ["dormido", "escuchando", "pensando", "hablando", "error"]
+ESTADOS = ["dormido", "despierto", "escuchando", "pensando", "hablando", "error"]
 
 
 # ============================================================================
@@ -68,7 +68,7 @@ def test_cada_estado_tiene_paleta_y_forma(estado):
     assert shape.eyes(estado).height > 0
 
 
-def test_los_cinco_estados_son_distinguibles():
+def test_los_estados_son_distinguibles():
     """
     Toda la expresión son dos barras. Si dos estados coinciden en forma Y color,
     el robot deja de comunicar y nada falla: hay que detectarlo acá.
@@ -92,6 +92,35 @@ def test_dormido_es_el_unico_sin_latido():
 
 def test_dormido_tiene_los_ojos_casi_cerrados():
     assert shape.eyes("dormido").height < 8
+
+
+def test_despierto_esta_entre_dormir_y_atender():
+    """
+    Es el estado que separa encendido de atento. Si se viera igual que
+    escuchando, abrir los ojos parecería que te está grabando.
+    """
+    assert shape.eyes("dormido").height < shape.eyes("despierto").height
+    assert shape.eyes("despierto").height < shape.eyes("escuchando").height
+
+
+def test_despierto_es_el_unico_desaturado():
+    """
+    Los cuatro colores fuertes dicen "pasa algo". Despierto dice "estoy acá",
+    así que tiene que ser el más apagado de los encendidos.
+    """
+    def saturacion(color):
+        r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+        return (max(r, g, b) - min(r, g, b)) / 255
+
+    despierto = saturacion(shape.palette("despierto").led)
+    for estado in ("escuchando", "pensando", "hablando", "error"):
+        assert despierto < saturacion(shape.palette(estado).led), estado
+
+
+def test_despierto_respira_mas_suave_que_los_activos():
+    assert shape.palette("despierto").glow_amp < 1.0
+    for estado in ("escuchando", "pensando", "hablando"):
+        assert shape.palette(estado).glow_amp == 1.0
 
 
 def test_escuchando_tiene_los_ojos_bien_abiertos():
@@ -132,6 +161,21 @@ def test_los_ojos_entran_en_la_pantalla(estado):
         assert x1 <= shape.SCREEN_W - 4, f"{estado}: se sale por la derecha"
         assert y0 >= 4, f"{estado}: se sale por arriba"
         assert y1 <= shape.SCREEN_H - 4, f"{estado}: se sale por abajo"
+
+
+@pytest.mark.parametrize("gx,gy", [(-1, -1), (-1, 1), (1, -1), (1, 1), (0, 0)])
+def test_la_mirada_no_saca_los_ojos_de_la_pantalla(gx, gy):
+    """
+    La mirada corre los ojos unos píxeles. Pasarse no falla: dibuja un ojo
+    cortado contra el borde, y sólo lo ves si estás mirando en ese momento.
+    """
+    forma = shape.eyes("despierto")
+    dx = shape.GAZE_X * gx
+    dy = shape.GAZE_Y * gy
+    for centro in (shape.EYE_LEFT_X, shape.EYE_RIGHT_X):
+        x0, y0, x1, y1 = shape.eye_box(centro, forma, 1.0, dx, dy)
+        assert x0 >= 4 and x1 <= shape.SCREEN_W - 4
+        assert y0 >= 4 and y1 <= shape.SCREEN_H - 4
 
 
 def test_los_ojos_no_se_tocan():

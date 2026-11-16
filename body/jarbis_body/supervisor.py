@@ -67,6 +67,9 @@ CHECK_S = 2.0
 HEALTHY_S = 60.0
 # Cuántas fallas seguidas antes de darse por vencido con un componente.
 MAX_FAILS = 5
+# Cuánto vale la seña que deja el menú al cerrar. Es el tiempo entre que el
+# robot la escribe y el supervisor nota que murió: un par de segundos.
+QUIT_MARK_TTL_S = 20.0
 
 
 @dataclass
@@ -94,8 +97,11 @@ class Component:
 
 
 class Supervisor:
-    def __init__(self, components: list[Component]) -> None:
+    def __init__(
+        self, components: list[Component], quit_mark: Path | None = None
+    ) -> None:
         self.components = components
+        self._quit_mark = quit_mark
         self._stopping = False
         self._closed_by_user = False
 
@@ -177,7 +183,7 @@ class Supervisor:
                 code = component.proc.poll()
                 component.proc = None
 
-                if code == EXIT_USER_QUIT:
+                if code == EXIT_USER_QUIT and self._quit_mark_is_fresh():
                     log.info(f"{component.name}: lo cerraste vos. Bajo Jarbis.")
                     component.dead = True
                     self._stopping = True
@@ -205,6 +211,34 @@ class Supervisor:
 
             log.info(f"{component.name}: reintento {component.fails}")
             self.start(component)
+
+    def _quit_mark_is_fresh(self) -> bool:
+        """
+        ¿La seña que deja el menú está, y es de recién?
+
+        Se exige además del código de salida porque un número solo no prueba
+        nada: lo puede producir un kill, un proceso roto o un lanzador que
+        propaga el código de otro. Y se borra al leerla, así que no puede
+        quedar vieja en disco y apagar Jarbis la semana que viene.
+        """
+        if self._quit_mark is None:
+            # Sin ruta no hay forma de confirmar, y ante la duda no se apaga
+            # nada: reponer un robot de más es un fastidio, apagar Jarbis
+            # entero sin que nadie lo pidiera es perder lo que estabas
+            # haciendo.
+            return False
+
+        try:
+            escrita = float(self._quit_mark.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            return False
+        finally:
+            try:
+                self._quit_mark.unlink()
+            except OSError:
+                pass
+
+        return 0 <= time.time() - escrita <= QUIT_MARK_TTL_S
 
     def shutdown(self) -> None:
         # En orden inverso: el cuerpo último, para que los demás puedan
@@ -286,7 +320,7 @@ def main() -> int:
         with_brain=not args.no_brain,
         robot_width=args.robot_width,
     )
-    supervisor = Supervisor(components)
+    supervisor = Supervisor(components, quit_mark=settings.var_dir / "quit.mark")
 
     def bajar(_sig: int, _frame: object) -> None:
         supervisor._stopping = True

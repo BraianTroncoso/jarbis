@@ -16,6 +16,7 @@ supervisor toma la decisión.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "body"))
 
 from jarbis_body import EXIT_USER_QUIT  # noqa: E402
-from jarbis_body.supervisor import Component, Supervisor  # noqa: E402
+from jarbis_body.supervisor import (  # noqa: E402
+    QUIT_MARK_TTL_S,
+    Component,
+    Supervisor,
+)
 
 
 class ProcesoMuerto:
@@ -37,15 +42,24 @@ class ProcesoMuerto:
         return self._code
 
 
-def supervisor_con(code: int, name: str = "robot") -> tuple[Supervisor, Component, list]:
+def supervisor_con(
+    code: int, name: str = "robot", mark: Path | None = None
+) -> tuple[Supervisor, Component, list]:
     """Un supervisor con un componente ya muerto y `start` espiado."""
     component = Component(name, ["no-se-ejecuta"])
     component.proc = ProcesoMuerto(code)
 
-    sup = Supervisor([component])
+    sup = Supervisor([component], quit_mark=mark)
     arrancados: list[Component] = []
     sup.start = lambda c: (arrancados.append(c), True)[1]  # type: ignore[assignment]
     return sup, component, arrancados
+
+
+def marca(tmp_path: Path, antiguedad_s: float = 0.0) -> Path:
+    """La seña que deja el menú, con la antigüedad que se pida."""
+    ruta = tmp_path / "quit.mark"
+    ruta.write_text(str(time.time() - antiguedad_s), encoding="utf-8")
+    return ruta
 
 
 # ============================================================================
@@ -53,9 +67,9 @@ def supervisor_con(code: int, name: str = "robot") -> tuple[Supervisor, Componen
 # ============================================================================
 
 
-def test_cerrar_a_mano_no_lo_repone():
+def test_cerrar_a_mano_no_lo_repone(tmp_path):
     """El bug que esto blindea: lo cerrabas y volvía a aparecer."""
-    sup, component, arrancados = supervisor_con(EXIT_USER_QUIT)
+    sup, component, arrancados = supervisor_con(EXIT_USER_QUIT, mark=marca(tmp_path))
 
     sup._check()
 
@@ -63,12 +77,12 @@ def test_cerrar_a_mano_no_lo_repone():
     assert component.dead is True
 
 
-def test_cerrar_a_mano_baja_todo():
+def test_cerrar_a_mano_baja_todo(tmp_path):
     """
     El ítem dice "Cerrar Jarbis", no "cerrar el robot". Si bajara sólo la cara
     visible, lo caro —Whisper en memoria, la sesión del cerebro— seguiría ahí.
     """
-    sup, _component, _ = supervisor_con(EXIT_USER_QUIT)
+    sup, _component, _ = supervisor_con(EXIT_USER_QUIT, mark=marca(tmp_path))
 
     sup._check()
 
@@ -76,18 +90,20 @@ def test_cerrar_a_mano_baja_todo():
     assert sup._closed_by_user is True
 
 
-def test_cerrar_a_mano_no_cuenta_como_falla():
+def test_cerrar_a_mano_no_cuenta_como_falla(tmp_path):
     """Si contara, cerrarlo cinco veces lo marcaría como roto."""
-    sup, component, _ = supervisor_con(EXIT_USER_QUIT)
+    sup, component, _ = supervisor_con(EXIT_USER_QUIT, mark=marca(tmp_path))
 
     sup._check()
 
     assert component.fails == 0
 
 
-def test_cerrar_el_cuerpo_tambien_baja_todo():
+def test_cerrar_el_cuerpo_tambien_baja_todo(tmp_path):
     """El código reservado vale para cualquier pieza, no sólo para el robot."""
-    sup, _component, arrancados = supervisor_con(EXIT_USER_QUIT, name="cuerpo")
+    sup, _component, arrancados = supervisor_con(
+        EXIT_USER_QUIT, name="cuerpo", mark=marca(tmp_path)
+    )
 
     sup._check()
 
@@ -165,10 +181,93 @@ def test_el_codigo_reservado_no_choca_con_los_comunes():
 
 
 @pytest.mark.parametrize("code", [0, 1, 2, -9, None])
-def test_cualquier_otro_codigo_es_una_caida(code):
-    sup, component, _ = supervisor_con(code if code is not None else 0)
+def test_cualquier_otro_codigo_es_una_caida(code, tmp_path):
+    sup, component, _ = supervisor_con(
+        code if code is not None else 0, mark=marca(tmp_path)
+    )
 
     sup._check()
 
     assert sup._stopping is False
     assert component.fails == 1
+
+
+# ============================================================================
+# La seña, que es lo que hace que el código de salida no alcance
+# ============================================================================
+
+
+def test_sin_la_sena_el_codigo_no_alcanza(tmp_path):
+    """
+    Un código de salida es un número: lo puede producir un kill, un proceso
+    roto, o un lanzador que propaga el código de su hijo. Si el número solo
+    bastara, algún día Jarbis se apaga entero y el log dice "lo cerraste vos"
+    sin que hayas tocado nada.
+    """
+    sup, component, arrancados = supervisor_con(
+        EXIT_USER_QUIT, mark=tmp_path / "no-existe.mark"
+    )
+
+    sup._check()
+
+    assert sup._stopping is False, "se apagó sin que nadie cerrara nada"
+    assert component.fails == 1
+
+
+def test_con_la_sena_fresca_si_cierra(tmp_path):
+    sup, _component, _ = supervisor_con(EXIT_USER_QUIT, mark=marca(tmp_path))
+
+    sup._check()
+
+    assert sup._stopping is True
+
+
+def test_una_sena_vieja_no_sirve(tmp_path):
+    """Si no caducara, el cierre de anoche apagaría Jarbis mañana."""
+    sup, _c, _ = supervisor_con(
+        EXIT_USER_QUIT, mark=marca(tmp_path, antiguedad_s=QUIT_MARK_TTL_S + 60)
+    )
+
+    sup._check()
+
+    assert sup._stopping is False
+
+
+def test_la_sena_se_consume(tmp_path):
+    """Leerla la borra: no puede quedar en disco esperando a un código 42."""
+    ruta = marca(tmp_path)
+    sup, _c, _ = supervisor_con(EXIT_USER_QUIT, mark=ruta)
+
+    sup._check()
+
+    assert not ruta.exists()
+
+
+def test_una_sena_ilegible_no_cierra(tmp_path):
+    ruta = tmp_path / "quit.mark"
+    ruta.write_text("cualquier cosa", encoding="utf-8")
+    sup, _c, _ = supervisor_con(EXIT_USER_QUIT, mark=ruta)
+
+    sup._check()
+
+    assert sup._stopping is False
+
+
+def test_una_sena_del_futuro_no_cierra(tmp_path):
+    """Un reloj corrido no puede ser una orden de apagado."""
+    sup, _c, _ = supervisor_con(
+        EXIT_USER_QUIT, mark=marca(tmp_path, antiguedad_s=-3600)
+    )
+
+    sup._check()
+
+    assert sup._stopping is False
+
+
+def test_la_sena_no_apaga_si_el_codigo_no_es_el_reservado(tmp_path):
+    """Las dos condiciones, no una u otra."""
+    sup, _c, _ = supervisor_con(1, mark=marca(tmp_path))
+
+    sup._check()
+
+    assert sup._stopping is False

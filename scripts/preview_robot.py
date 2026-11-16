@@ -24,13 +24,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "body"))
 from jarbis_body.robot import render, shape  # noqa: E402
 from jarbis_body.robot.menu import Item, RobotMenu  # noqa: E402
 
-ESTADOS = ["dormido", "escuchando", "pensando", "hablando", "error"]
+ESTADOS = ["dormido", "despierto", "escuchando", "pensando", "hablando", "error"]
 
 # Los estados se llaman en español adentro. Las imágenes del README, que está en
 # inglés, necesitan la traducción — pero sólo del rótulo: el render sigue
 # recibiendo el nombre real, así la hoja no puede divergir del widget.
 EN = {
-    "dormido": "idle",
+    "dormido": "asleep",
+    "despierto": "awake",
     "escuchando": "listening",
     "pensando": "thinking",
     "hablando": "speaking",
