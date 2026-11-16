@@ -51,6 +51,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from jarbis_body import EXIT_USER_QUIT
+from jarbis_body.single import SingleInstance
 
 logging.basicConfig(
     level=logging.INFO,
@@ -315,6 +316,17 @@ def main() -> int:
         logging.FileHandler(settings.var_dir / "supervisor.log", encoding="utf-8")
     )
 
+    # Uno solo. El acceso del escritorio se aprieta dos veces, y sin esto cada
+    # click levantaba un Jarbis entero más: dos robots en pantalla, dos
+    # cerebros, y dos cuerpos peleando por el puerto del puente.
+    guard = SingleInstance(lock_file=settings.var_dir / "supervisor.lock")
+    if not guard.acquire():
+        log.info(
+            "Jarbis ya está corriendo; no levanto otro. "
+            "Si no lo ves en pantalla, cerralo desde su menú y volvé a abrirlo."
+        )
+        return 0
+
     components = build_components(
         with_robot=not args.no_robot,
         with_brain=not args.no_brain,
@@ -330,7 +342,10 @@ def main() -> int:
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, bajar)
 
-    return supervisor.run()
+    try:
+        return supervisor.run()
+    finally:
+        guard.release()
 
 
 if __name__ == "__main__":

@@ -164,6 +164,14 @@ With neither set, whatever is already in your Startup folder stays as it is. You
 can change your mind later without redeploying — `shortcuts.ps1` ships next to
 the launchers and takes `-Autostart` / `-NoAutostart`.
 
+### One Jarbis, not three
+
+The shortcut is on your desktop, and desktop shortcuts get double-clicked. The
+supervisor takes a named mutex at startup; if another one already holds it, it
+logs a line and exits instead of raising a second stack. Without that, every
+click brought up another robot, another brain, and another body losing a fight
+over port 8765.
+
 ### Closing it closes it
 
 **Cerrar Jarbis** in the right-click menu shuts the whole thing down — the
@@ -219,6 +227,7 @@ body/jarbis_body/
   reflex.py     decides WHEN to speak first (no LLM)
   greeting.py   the morning greeting, the only trigger that is wired up
   supervisor.py starts the four pieces and replaces them
+  single.py     one Jarbis per session, not one per double-click
   doctor.py · face.py
 brain/
   client.py     transport: bridge ↔ engine
@@ -229,7 +238,7 @@ web/index.html  the panel
 scripts/        fetch-models · deploy-body · bench_voice · bench_brain ·
                 tune_stt · compare_stt · diag_wakeword · preview_robot ·
                 make_icon
-tests/          253 tests, none of them need a microphone
+tests/          267 tests, none of them need a microphone
 ```
 
 ### The audio layer is inherited
@@ -262,7 +271,7 @@ It has been tested against a real `rm -rf`.
 ## Tests
 
 ```bash
-python3 -m pytest tests/ -q          # 253 tests, no microphone needed
+python3 -m pytest tests/ -q          # 267 tests, no microphone needed
 ```
 
 The calibration benches do need the Windows environment:
