@@ -1,0 +1,4 @@
+{"id":1,"slug":"pre-push-checks","name":"Before anything leaves this machine","scope":"project","scope_id":1,"extends":null,"created_at":"2026-11-15 19:40:30","standalone":0}
+{"id":2,"slug":"commit-ritual","name":"Commit one logical change","scope":"project","scope_id":1,"extends":null,"created_at":"2026-11-15 19:40:30","standalone":1}
+{"id":3,"slug":"branch-per-session","name":"Open and close a branch for this session","scope":"project","scope_id":1,"extends":null,"created_at":"2026-11-15 19:40:30","standalone":1}
+{"id":4,"slug":"session-close","name":"Close the session so the next one can start","scope":"project","scope_id":1,"extends":null,"created_at":"2026-11-15 19:40:30","standalone":1}

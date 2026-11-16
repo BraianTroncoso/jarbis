@@ -1,0 +1,27 @@
+{
+  "format": "myjarbis-brain-ndjson",
+  "formatVersion": 1,
+  "schemaVersion": 5,
+  "exportedAt": "2026-11-16T02:22:18.201Z",
+  "counts": {
+    "meta": 1,
+    "orgs": 0,
+    "context_kinds": 24,
+    "projects": 1,
+    "modules": 5,
+    "project_context": 8,
+    "module_context": 9,
+    "skills": 11,
+    "sessions": 0,
+    "observations": 0,
+    "refs": 0,
+    "project_state": 1,
+    "providers": 0,
+    "workflows": 4,
+    "workflow_steps": 16,
+    "org_notes": 0,
+    "org_note_content": 0,
+    "workflow_runs": 0,
+    "workflow_run_steps": 0
+  }
+}
