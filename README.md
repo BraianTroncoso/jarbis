@@ -315,15 +315,28 @@ compare against the original text. That closes the loop with nobody talking.
 There are deliberately no loose `.md` files. Everything about this project —
 decisions, hardware traps, measurements, open threads — lives in a project-local
 [MyJarbis](https://github.com/BraianTroncoso/myjarbis) database
-(`.myjarbis/memory.db`, SQLite + FTS5), split into four modules: `cuerpo`,
-`cara`, `cerebro`, `operacion`.
+(`.myjarbis/memory.db`, SQLite + FTS5), split into four modules: `cuerpo` (the
+body), `cara` (what you see), `cerebro` (the brain) and `operacion` (keeping it
+running without breaking anything).
 
     myjarbis status                 # where things stand
-    myjarbis module use cuerpo      # open a module
+    myjarbis module use operacion   # open a module
     claude  →  /jarbis              # and work with context loaded
 
-MyJarbis is **optional**. Jarbis runs without it; the brain just has less memory
-to work with. This README is the front door; the reasoning is in the database.
+**The database is gitignored; its contents are not.** `myjarbis brain export`
+writes the whole brain to NDJSON under `.myjarbis/brain/`, and that is what gets
+committed — so the reasoning is readable here, in plain text, diffable commit by
+commit, without installing anything. `myjarbis brain import` rebuilds the
+database from it.
+
+Which means the project memory is worth reading even if you never run MyJarbis.
+Why the body pushes instead of being polled, why a dense 8B model tops out at
+4-5 tokens per second on this hardware, why `os.kill(pid, 0)` is not a liveness
+check on Windows, why two different ONNX models fail silently without warm-up —
+it is all in `.myjarbis/brain/project_context.ndjson` and `module_context.ndjson`.
+
+MyJarbis itself is **optional**. Jarbis runs without it; the brain just has less
+memory to work with. This README is the front door; the reasoning is in there.
 
 ---
 
